@@ -63,6 +63,7 @@ library
                         Testnet.Cardano
                         Testnet.Conf
                         Testnet.List
+                        Testnet.Plutus
                         Testnet.Shelley
                         Testnet.SubmitApi
                         Testnet.Utils
