@@ -75,6 +75,7 @@ data TestnetOptions = TestnetOptions
   , protocolVersion :: Int
   , numSpoNodes :: Int
   , slotDuration :: Int
+  , activeSlotsCoeff :: Double
   , securityParam :: Int
   , totalBalance :: Int
   , nodeLoggingFormat :: NodeLoggingFormat
@@ -86,6 +87,7 @@ defaultTestnetOptions = TestnetOptions
   , protocolVersion = 8
   , numSpoNodes = 3
   , slotDuration = 1000
+  , activeSlotsCoeff = 0.9 -- required to avoid long waits for slot leader
   , securityParam = 10
   , totalBalance = 10020000000
   , nodeLoggingFormat = NodeLoggingFormatAsJson
@@ -262,7 +264,7 @@ testnet testnetOptions H.Conf {..} = do
 
   H.rewriteJsonFile (tempAbsPath </> "genesis/shelley/genesis.json") $ J.rewriteObject
     ( HM.insert "slotLength"             (toJSON @Double 0.1)
-    . HM.insert "activeSlotsCoeff"       (toJSON @Double 0.1)
+    . HM.insert "activeSlotsCoeff"       (toJSON @Double (activeSlotsCoeff testnetOptions))
     . HM.insert "securityParam"          (toJSON @Int 10)
     . HM.insert "epochLength"            (toJSON @Int 500)
     . HM.insert "maxLovelaceSupply"      (toJSON @Int 1000000000000)
