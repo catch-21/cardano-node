@@ -75,6 +75,7 @@ data TestnetOptions = TestnetOptions
   , protocolVersion :: Int
   , numSpoNodes :: Int
   , slotDuration :: Int
+  , slotLength :: Double
   , activeSlotsCoeff :: Double
   , securityParam :: Int
   , totalBalance :: Int
@@ -87,7 +88,8 @@ defaultTestnetOptions = TestnetOptions
   , protocolVersion = 8
   , numSpoNodes = 3
   , slotDuration = 1000
-  , activeSlotsCoeff = 0.9 -- required to avoid long waits for slot leader
+  , slotLength = 0.2
+  , activeSlotsCoeff = 0.1 -- higher value (e.g. 0.9) prevents long waits for slot leader but could be the cause of more rollbacks/forks
   , securityParam = 10
   , totalBalance = 10020000000
   , nodeLoggingFormat = NodeLoggingFormatAsJson
@@ -263,10 +265,10 @@ testnet testnetOptions H.Conf {..} = do
       ( J.rewriteObject ( HM.insert "protocolMagic" (toJSON @Int testnetMagic)))
 
   H.rewriteJsonFile (tempAbsPath </> "genesis/shelley/genesis.json") $ J.rewriteObject
-    ( HM.insert "slotLength"             (toJSON @Double 0.1)
+    ( HM.insert "slotLength"             (toJSON @Double (slotLength testnetOptions))
     . HM.insert "activeSlotsCoeff"       (toJSON @Double (activeSlotsCoeff testnetOptions))
     . HM.insert "securityParam"          (toJSON @Int 10)
-    . HM.insert "epochLength"            (toJSON @Int 500)
+    . HM.insert "epochLength"            (toJSON @Int 1000)
     . HM.insert "maxLovelaceSupply"      (toJSON @Int 1000000000000)
     . flip HM.adjust "protocolParams"
       ( J.rewriteObject
@@ -280,7 +282,7 @@ testnet testnetOptions H.Conf {..} = do
         . J.rewriteObject (HM.insert "minUTxOValue"           (toJSON @Int 1000000))
         . J.rewriteObject (HM.insert "decentralisationParam"  (toJSON @Double 0.7))
       )
-    . HM.insert "updateQuorum"           (toJSON @Int 2)
+    . HM.insert "updateQuorum"           (toJSON @Int 1)
     )
 
   H.renameFile (tempAbsPath </> "pools/vrf1.skey") (tempAbsPath </> "node-spo1/vrf.skey")
@@ -406,7 +408,7 @@ testnet testnetOptions H.Conf {..} = do
     return (sprocket, stdIn, nodeStdoutFile, nodeStderrFile, hProcess)
 
   now <- H.noteShowIO DTC.getCurrentTime
-  deadline <- H.noteShow $ DTC.addUTCTime 90 now
+  deadline <- H.noteShow $ DTC.addUTCTime 300 now -- increased from 90s
 
   forM_ spoNodes $ \node -> do
     nodeStdoutFile <- H.noteTempFile logDir $ node <> ".stdout.log"
