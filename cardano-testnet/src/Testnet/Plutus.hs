@@ -1,5 +1,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -24,7 +25,9 @@ module Testnet.Plutus
 
 import qualified Cardano.Api as C
 import           Control.Applicative (Applicative (..))
+import           Control.Concurrent (threadDelay)
 import           Control.Monad (Monad (..), fmap, forM, forM_, return, void, when, (=<<))
+import           Control.Monad.IO.Class (liftIO)
 import           Data.Aeson (encode, object, toJSON, (.=))
 import           Data.Bool (Bool (..))
 import           Data.Eq (Eq)
@@ -268,7 +271,7 @@ testnet testnetOptions H.Conf {..} = do
     ( HM.insert "slotLength"             (toJSON @Double (slotLength testnetOptions))
     . HM.insert "activeSlotsCoeff"       (toJSON @Double (activeSlotsCoeff testnetOptions))
     . HM.insert "securityParam"          (toJSON @Int 10)
-    . HM.insert "epochLength"            (toJSON @Int 1000)
+    . HM.insert "epochLength"            (toJSON @Int 10_000) -- increased so that txs can have higher upper bound validity range
     . HM.insert "maxLovelaceSupply"      (toJSON @Int 1000000000000)
     . flip HM.adjust "protocolParams"
       ( J.rewriteObject
@@ -409,6 +412,9 @@ testnet testnetOptions H.Conf {..} = do
 
   now <- H.noteShowIO DTC.getCurrentTime
   deadline <- H.noteShow $ DTC.addUTCTime 300 now -- increased from 90s
+
+  when (OS.os `L.elem` ["darwin"]) $ do
+    liftIO $ threadDelay 60_000_000 -- wait 1 min for network to stabilise before proceeding
 
   forM_ spoNodes $ \node -> do
     nodeStdoutFile <- H.noteTempFile logDir $ node <> ".stdout.log"
