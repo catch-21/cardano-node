@@ -97,6 +97,7 @@ babbageTestnet testnetOptions H.Conf {..} = do
     . HM.insert "TestMaryHardForkAtEpoch" (toJSON @Int 0)
     . HM.insert "TestAlonzoHardForkAtEpoch" (toJSON @Int 0)
     . HM.insert "TestBabbageHardForkAtEpoch" (toJSON @Int 0)
+    . HM.insert "TestConwayHardForkAtEpoch" (toJSON @Int 0)
     . HM.insert "ExperimentalHardForksEnabled" (toJSON True)
     . flip HM.alter "setupScribes"
         ( fmap
