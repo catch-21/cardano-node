@@ -72,6 +72,7 @@ library
   hs-source-dirs:       src
   exposed-modules:      Cardano.Testnet
                         Testnet.Babbage
+                        Testnet.Conway
                         Testnet.Byron
                         Testnet.Options
                         Testnet.Util.Assert
