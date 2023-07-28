@@ -250,7 +250,7 @@ conwayTestnet testnetOptions (H.Conf tempAbsPath) = do
     . flip HM.adjust "protocolParams"
       ( J.rewriteObject
         ( flip HM.adjust "protocolVersion"
-          ( J.rewriteObject ( HM.insert "major" (toJSON @Int 8)))
+          ( J.rewriteObject ( HM.insert "major" (toJSON @Int $ conwayProtocolVersion testnetOptions)))
         )
       )
     . HM.insert "rho"                    (toJSON @Double 0.1)
