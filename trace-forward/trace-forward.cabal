@@ -95,10 +95,10 @@ test-suite test
   build-depends:        aeson
                       , bytestring
                       , contra-tracer
-                      , io-classes
-                      , io-sim
-                      , ouroboros-network-api
-                      , ouroboros-network-framework
+                      , io-classes ^>= 1.1
+                      , io-sim ^>= 1.1
+                      , ouroboros-network-api ^>= 0.5.0
+                      , ouroboros-network-framework ^>= 0.7
                       , trace-forward
                       , QuickCheck
                       , serialise
