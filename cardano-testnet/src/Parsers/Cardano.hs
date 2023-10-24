@@ -27,6 +27,13 @@ optsTestnet envCli = CardanoTestnetOptions
   <$> pNumBftAndSpoNodes
   <*> pLegacyCardanoEra envCli
   <*> OA.option auto
+      (   OA.long "protocol-version"
+      <>  OA.help "Protocol version"
+      <>  OA.metavar "INT"
+      <>  OA.showDefault
+      <>  OA.value (cardanoProtocolVersion cardanoDefaultTestnetOptions)
+      )
+  <*> OA.option auto
       (   OA.long "epoch-length"
       <>  OA.help "Epoch length"
       <>  OA.metavar "MILLISECONDS"
