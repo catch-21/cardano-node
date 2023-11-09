@@ -101,11 +101,14 @@ createSPOGenesisAndFiles testnetOptions startTime (TmpAbsolutePath tempAbsPath')
  -- 50 second epochs
  -- Epoch length should be "10 * k / f" where "k = securityParam, f = activeSlotsCoeff"
   H.rewriteJsonFile createStakedInitialGenesisFile $ J.rewriteObject
-      ( HM.insert "securityParam"          (toJSON @Int 5)    -- TODO: USE config p arameter
+      ( HM.insert "slotLength"             (toJSON $ cardanoSlotLength testnetOptions)
+      . HM.insert "activeSlotsCoeff"       (toJSON $ cardanoActiveSlotsCoeff testnetOptions)
+      . HM.insert "securityParam"          (toJSON @Int 5)    -- TODO: USE config p arameter
+      . HM.insert "epochLength"            (toJSON $ cardanoEpochLength testnetOptions)  -- Should be "10 * k / f" where "k = securityParam, f = activeSlotsCoeff"
       . HM.adjust
           (J.rewriteObject
               $ HM.adjust
-                (J.rewriteObject (HM.insert "major" (toJSON @Int 8)))
+                (J.rewriteObject (HM.insert "major" (toJSON $ cardanoProtocolVersion testnetOptions)))
                 "protocolVersion"
           )   "protocolParams"
       . HM.insert "rho"                    (toJSON @Double 0.1)
