@@ -2,6 +2,7 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE TypeApplications #-}
 
 module Testnet.Start.Cardano
@@ -20,36 +21,49 @@ module Testnet.Start.Cardano
   ) where
 
 
-import           Cardano.Api
-import           Cardano.Api.Ledger (StandardCrypto)
-
-import           Cardano.Ledger.Alonzo.Genesis (AlonzoGenesis)
-import           Cardano.Ledger.Conway.Genesis (ConwayGenesis)
 
 import           Prelude hiding (lines)
 
-import           Control.Monad
-import qualified Control.Monad.Class.MonadTimer.SI as MT
 import           Control.Monad.IO.Class
-import           Control.Monad.Trans.Class (lift)
 import           Control.Monad.Trans.Except (runExceptT)
+import Control.Concurrent (threadDelay)
+import qualified Control.Exception as IO
+import Control.Monad
+import Control.Monad.Trans.Class (lift)
 import           Data.Aeson
 import qualified Data.Aeson as Aeson
 import           Data.Bifunctor (first)
 import qualified Data.ByteString.Lazy as LBS
 import           Data.Either
+import Data.Functor (($>))
 import qualified Data.List as L
 import           Data.Maybe
+
 import qualified Data.Text as Text
 import           Data.Time (UTCTime)
 import qualified Data.Time.Clock as DTC
 import           Data.Word (Word32)
 import qualified GHC.Stack as GHC
+import qualified Network.Socket as IO
+import           Prelude hiding (lines)
 import           System.FilePath ((</>))
 import qualified System.Info as OS
 
-import           Testnet.Components.Configuration
+import Hedgehog (MonadTest)
+import qualified Hedgehog as H
+import           Hedgehog.Extras (failMessage)
+import Hedgehog.Extras.Stock (allocateRandomPorts)
+import qualified Hedgehog.Extras.Stock.OS as OS
+import qualified Hedgehog.Extras.Test.Base as H
+import qualified Hedgehog.Extras.Test.File as H
+
 import qualified Testnet.Defaults as Defaults
+
+import           Cardano.Api
+import           Cardano.Api.Ledger (StandardCrypto)
+import           Cardano.Ledger.Alonzo.Genesis (AlonzoGenesis)
+import           Cardano.Ledger.Conway.Genesis (ConwayGenesis)
+import           Testnet.Components.Configuration
 import           Testnet.Filepath
 import qualified Testnet.Process.Run as H
 import           Testnet.Process.Run
@@ -58,12 +72,6 @@ import           Testnet.Property.Checks
 import           Testnet.Runtime as TR hiding (shelleyGenesis)
 import qualified Testnet.Start.Byron as Byron
 import           Testnet.Start.Types
-
-import qualified Hedgehog as H
-import           Hedgehog.Extras (failMessage)
-import qualified Hedgehog.Extras.Stock.OS as OS
-import qualified Hedgehog.Extras.Test.Base as H
-import qualified Hedgehog.Extras.Test.File as H
 
 {- HLINT ignore "Redundant flip" -}
 {- HLINT ignore "Redundant id" -}
@@ -86,8 +94,40 @@ data ForkPoint
   deriving (Show, Eq, Read)
 
 
--- | For an unknown reason, CLI commands are a lot slower on Windows than on Linux and
--- MacOS.  We need to allow a lot more time to set up a testnet.
+-- | Check if a TCP port is open
+isPortOpen :: Int -> IO Bool
+isPortOpen port = do
+  socketAddressInfos <- IO.getAddrInfo Nothing (Just "127.0.0.1") (Just (show port))
+  case socketAddressInfos of
+    socketAddressInfo : _ -> canConnect (IO.addrAddress socketAddressInfo) $> True
+    [] -> return False
+
+{- | Check if it is possible to connect to a socket address
+ TODO: upstream fix to Hedgehog Extras
+-}
+canConnect :: IO.SockAddr -> IO Bool
+canConnect sockAddr = IO.bracket (IO.socket IO.AF_INET IO.Stream 6) IO.close' $ \sock -> do
+  res <- IO.try $ IO.connect sock sockAddr
+  case res of
+    Left (_ :: IO.IOException) -> return False
+    Right _ -> return True
+
+-- | Get random list of open ports. Timeout after 60seconds if unsuccessful.
+getOpenPorts :: (MonadTest m, MonadIO m) => Int -> Int -> m [Int]
+getOpenPorts n numberOfPorts = do
+  when (n == 0) $ do
+    error "getOpenPorts timeout"
+  ports <- liftIO $ allocateRandomPorts numberOfPorts
+  allOpen <- liftIO $ mapM isPortOpen ports
+  unless (and allOpen) $ do
+    H.annotate "Some ports are not open, trying again..."
+    liftIO $ threadDelay 1_000_000 -- wait 1 sec
+    void $ getOpenPorts (pred n) numberOfPorts
+  pure ports
+
+{- | For an unknown reason, CLI commands are a lot slower on Windows than on Linux and
+ MacOS.  We need to allow a lot more time to set up a testnet.
+-}
 startTimeOffsetSeconds :: DTC.NominalDiffTime
 startTimeOffsetSeconds = if OS.isWin32 then 90 else 15
 
@@ -174,7 +214,7 @@ cardanoTestnet
       optionsMagic :: Word32 = fromIntegral $ cardanoTestnetMagic testnetOptions
       testnetMagic = cardanoTestnetMagic testnetOptions
       numPoolNodes = length $ cardanoNodes testnetOptions
-      nbPools = numPools testnetOptions
+      -- nbPools = numPools testnetOptions
       era = cardanoNodeEra testnetOptions
 
    -- Sanity checks
@@ -220,7 +260,7 @@ cardanoTestnet
 
     configurationFile <- H.noteShow $ tmpAbsPath </> "configuration.yaml"
 
-    _ <- createSPOGenesisAndFiles nbPools era shelleyGenesis (TmpAbsolutePath tmpAbsPath)
+    _ <- createSPOGenesisAndFiles testnetOptions era shelleyGenesis (TmpAbsolutePath tmpAbsPath)
 
     poolKeys <- H.noteShow $ flip fmap [1..numPoolNodes] $ \n ->
       PoolNodeKeys
@@ -292,9 +332,11 @@ cardanoTestnet
     H.renameFile (tmpAbsPath </> "byron-gen-command/delegation-cert.001.json") (tmpAbsPath </> poolKeyDir 2 </>"byron-delegation.cert")
     H.renameFile (tmpAbsPath </> "byron-gen-command/delegation-cert.002.json") (tmpAbsPath </> poolKeyDir 3 </>"byron-delegation.cert")
 
-    H.writeFile (tmpAbsPath </> poolKeyDir 1 </> "port") "3001"
-    H.writeFile (tmpAbsPath </> poolKeyDir 2 </> "port") "3002"
-    H.writeFile (tmpAbsPath </> poolKeyDir 3 </> "port") "3003"
+    [port1, port2, port3, otherPort] <- getOpenPorts 60 (length (cardanoNodes testnetOptions) + 1)
+
+    H.writeFile (tmpAbsPath </> poolKeyDir 1 </> "port") (show port1)
+    H.writeFile (tmpAbsPath </> poolKeyDir 2 </> "port") (show port2)
+    H.writeFile (tmpAbsPath </> poolKeyDir 3 </> "port") (show port3)
 
 
     -- Make topology files
@@ -305,17 +347,17 @@ cardanoTestnet
       [ "Producers" .= toJSON
         [ object
           [ "addr"    .= toJSON @String "127.0.0.1"
-          , "port"    .= toJSON @Int 3002
+          , "port"    .= toJSON @Int port2
           , "valency" .= toJSON @Int 1
           ]
         , object
           [ "addr"    .= toJSON @String "127.0.0.1"
-          , "port"    .= toJSON @Int 3003
+          , "port"    .= toJSON @Int port3
           , "valency" .= toJSON @Int 1
           ]
         , object
           [ "addr"    .= toJSON @String "127.0.0.1"
-          , "port"    .= toJSON @Int 3005
+          , "port"    .= toJSON @Int otherPort
           , "valency" .= toJSON @Int 1
           ]
         ]
@@ -326,17 +368,17 @@ cardanoTestnet
       [ "Producers" .= toJSON
         [ object
           [ "addr"    .= toJSON @String "127.0.0.1"
-          , "port"    .= toJSON @Int 3001
+          , "port"    .= toJSON @Int port1
           , "valency" .= toJSON @Int 1
           ]
         , object
           [ "addr"    .= toJSON @String "127.0.0.1"
-          , "port"    .= toJSON @Int 3003
+          , "port"    .= toJSON @Int port3
           , "valency" .= toJSON @Int 1
           ]
         , object
           [ "addr"    .= toJSON @String "127.0.0.1"
-          , "port"    .= toJSON @Int 3005
+          , "port"    .= toJSON @Int otherPort
           , "valency" .= toJSON @Int 1
           ]
         ]
@@ -347,17 +389,17 @@ cardanoTestnet
       [ "Producers" .= toJSON
         [ object
           [ "addr"    .= toJSON @String "127.0.0.1"
-          , "port"    .= toJSON @Int 3001
+          , "port"    .= toJSON @Int port1
           , "valency" .= toJSON @Int 1
           ]
         , object
           [ "addr"    .= toJSON @String "127.0.0.1"
-          , "port"    .= toJSON @Int 3002
+          , "port"    .= toJSON @Int port2
           , "valency" .= toJSON @Int 1
           ]
         , object
           [ "addr"    .= toJSON @String "127.0.0.1"
-          , "port"    .= toJSON @Int 3005
+          , "port"    .= toJSON @Int otherPort
           , "valency" .= toJSON @Int 1
           ]
         ]
@@ -387,7 +429,7 @@ cardanoTestnet
       let (_ , poolNodes) = partitionEithers ePoolNodes
 
       -- FIXME: replace with ledger events waiting for chain extensions
-      liftIO $ MT.threadDelay 10
+      liftIO $ threadDelay 10
       now <- H.noteShowIO DTC.getCurrentTime
       deadline <- H.noteShow $ DTC.addUTCTime 35 now
 

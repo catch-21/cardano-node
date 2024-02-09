@@ -38,6 +38,7 @@ data CardanoTestnetOptions = CardanoTestnetOptions
     -- created.
     cardanoNodes :: [TestnetNodeOptions]
   , cardanoNodeEra :: AnyCardanoEra
+  , cardanoProtocolVersion :: Int
   , cardanoEpochLength :: Int
   , cardanoSlotLength :: Double
   , cardanoTestnetMagic :: Int
@@ -51,10 +52,11 @@ cardanoDefaultTestnetOptions :: CardanoTestnetOptions
 cardanoDefaultTestnetOptions = CardanoTestnetOptions
   { cardanoNodes = cardanoDefaultTestnetNodeOptions
   , cardanoNodeEra = AnyCardanoEra BabbageEra
+  , cardanoProtocolVersion = 8
   , cardanoEpochLength = 500
   , cardanoSlotLength = 0.1
   , cardanoTestnetMagic = 42
-  , cardanoActiveSlotsCoeff = 0.1
+  , cardanoActiveSlotsCoeff = 1.0e-1
   , cardanoMaxSupply = 10020000000
   , cardanoEnableP2P = False
   , cardanoNodeLoggingFormat = NodeLoggingFormatAsJson
