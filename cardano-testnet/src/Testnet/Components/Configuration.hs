@@ -22,18 +22,22 @@ import           Cardano.Node.Types
 import           Ouroboros.Network.PeerSelection.LedgerPeers
 import           Ouroboros.Network.PeerSelection.RelayAccessPoint
 import           Ouroboros.Network.PeerSelection.State.LocalRootPeers
+-- import           Cardano.Ledger.BaseTypes as Ledger
+import Data.Scientific (fromFloatDigits)
 
 import           Control.Monad
 import           Control.Monad.Catch (MonadCatch)
 import           Control.Monad.IO.Class (MonadIO)
-import           Data.Aeson
+-- import           Data.Aeson
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Lens as L
 import           Data.Bifunctor
 import qualified Data.ByteString.Lazy as LBS
 import           Data.Char (toLower)
+-- import           Data.Maybe (fromMaybe)
 import qualified Data.List as List
 import           Data.String
+-- import           Data.Time
 import           GHC.Stack (HasCallStack)
 import qualified GHC.Stack as GHC
 import           Lens.Micro
@@ -90,13 +94,15 @@ numPools CardanoTestnetOptions { cardanoNodes } = NumPools $ length cardanoNodes
 
 createSPOGenesisAndFiles
   :: (MonadTest m, MonadCatch m, MonadIO m, HasCallStack)
-  => NumPools -- ^ The number of pools to make
+  => CardanoTestnetOptions -- ^ The number of pools to make
   -> AnyCardanoEra -- ^ The era to use
   -> ShelleyGenesis StandardCrypto -- ^ The shelley genesis to use.
   -> TmpAbsolutePath
   -> m FilePath -- ^ Shelley genesis directory
-createSPOGenesisAndFiles (NumPools numPoolNodes) era shelleyGenesis (TmpAbsolutePath tempAbsPath') = do
-  let genesisShelleyFpAbs = tempAbsPath' </> defaultShelleyGenesisFp
+createSPOGenesisAndFiles testnetOptions era shelleyGenesis (TmpAbsolutePath tempAbsPath') = do
+
+  let NumPools numPoolNodes = numPools testnetOptions
+      genesisShelleyFpAbs = tempAbsPath' </> defaultShelleyGenesisFp
       genesisShelleyDirAbs = takeDirectory genesisShelleyFpAbs
   genesisShelleyDir <- H.createDirectoryIfMissing genesisShelleyDirAbs
   let testnetMagic = sgNetworkMagic shelleyGenesis
@@ -111,16 +117,19 @@ createSPOGenesisAndFiles (NumPools numPoolNodes) era shelleyGenesis (TmpAbsolute
   -- We should *never* be modifying the genesis file after @cardanoTestnet@ is run because this
   -- is sure to be a source of confusion if users provide genesis files and we are mutating them
   -- without their knowledge.
-  H.evalIO $ LBS.writeFile genesisShelleyFpAbs $ encode shelleyGenesis
+  H.evalIO $ LBS.writeFile genesisShelleyFpAbs $ Aeson.encode shelleyGenesis
 
   -- TODO: Remove this rewrite.
  -- 50 second epochs
  -- Epoch length should be "10 * k / f" where "k = securityParam, f = activeSlotsCoeff"
   H.rewriteJsonFile genesisShelleyFpAbs $ \o -> o
     & L.key "protocolParams" .  L.key "rho" . L._Number  .~ 0.1
+    & L.key "slotLength" . L._Double .~ cardanoSlotLength testnetOptions
+    & L.key "activeSlotsCoeff" . L._Number .~ fromFloatDigits (cardanoActiveSlotsCoeff testnetOptions) -- 1.0e-2
     & L.key "protocolParams" .  L.key "tau" . L._Number  .~ 0.1
-    & L.key "protocolParams" . L.key "protocolVersion" . L.key "major" . L._Integer .~ 8
-    & L.key "securityParam" . L._Integer .~ 5
+    & L.key "protocolParams" . L.key "protocolVersion" . L.key "major" . L._Integral .~ cardanoProtocolVersion testnetOptions
+    & L.key "securityParam" . L._Integral .~ cardanoSecurityParam testnetOptions
+    & L.key "epochLength" . L._Integral .~ cardanoEpochLength testnetOptions
     & L.key "updateQuorum" . L._Integer .~ 2
 
   -- TODO: create-testnet-data should have arguments for

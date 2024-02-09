@@ -25,6 +25,13 @@ optsTestnet envCli = CardanoTestnetOptions
   <$> pNumSpoNodes
   <*> pLegacyCardanoEra envCli
   <*> OA.option auto
+      (   OA.long "protocol-version"
+      <>  OA.help "Protocol version"
+      <>  OA.metavar "INT"
+      <>  OA.showDefault
+      <>  OA.value (cardanoProtocolVersion cardanoDefaultTestnetOptions)
+      )
+  <*> OA.option auto
       (   OA.long "epoch-length"
       <>  OA.help "Epoch length"
       <>  OA.metavar "MILLISECONDS"
@@ -45,6 +52,13 @@ optsTestnet envCli = CardanoTestnetOptions
       <>  OA.metavar "DOUBLE"
       <>  OA.showDefault
       <>  OA.value (cardanoActiveSlotsCoeff cardanoDefaultTestnetOptions)
+      )
+  <*> OA.option auto
+      (   OA.long "security-param"
+      <>  OA.help "Security param"
+      <>  OA.metavar "INT"
+      <>  OA.showDefault
+      <>  OA.value (cardanoSecurityParam cardanoDefaultTestnetOptions)
       )
   <*> pMaxLovelaceSupply
   <*> OA.option auto
